@@ -1458,19 +1458,24 @@ function! s:EasyMotion(regexp, direction, visualmode, is_inclusive, ...) " {{{
 
         " -- Shade inactive source --------------- {{{
         if g:EasyMotion_do_shade && targets_len != 1 && s:flag.dot_repeat != 1
-            if a:direction == 1 " Backward
-                let shade_hl_re = s:flag.within_line
-                                \ ? '^.*\%#'
-                                \ : '\%'. win_first_line .'l\_.*\%#'
-            elseif a:direction == 0 " Forward
-                let shade_hl_re = s:flag.within_line
-                                \ ? '\%#.*$'
-                                \ : '\%#\_.*\%'. win_last_line .'l'
-            else " Both directions
-                let shade_hl_re = s:flag.within_line
-                                \ ? '^.*\%#.*$'
-                                \ : '\_.*'
-            endif
+            " Backward shading doesn't work, if the first line is folded, 
+            " so shade always everything
+            let shade_hl_re = s:flag.within_line
+                            \ ? '^.*\%#.*$'
+                            \ : '\_.*'
+            " if a:direction == 1 " Backward
+            "     let shade_hl_re = s:flag.within_line
+            "                     \ ? '^.*\%#'
+            "                     \ : '\%'. win_first_line .'l\_.*\%#'
+            " elseif a:direction == 0 " Forward
+            "     let shade_hl_re = s:flag.within_line
+            "                     \ ? '\%#.*$'
+            "                     \ : '\%#\_.*\%'. win_last_line .'l'
+            " else " Both directions
+            "     let shade_hl_re = s:flag.within_line
+            "                     \ ? '^.*\%#.*$'
+            "                     \ : '\_.*'
+            " endif
 
             call EasyMotion#highlight#add_highlight(
                 \ shade_hl_re, g:EasyMotion_hl_group_shade)

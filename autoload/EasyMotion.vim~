@@ -337,7 +337,7 @@ function! EasyMotion#User(pattern, visualmode, direction, inclusive, ...) " {{{
     return s:EasyMotion_is_cancelled
 endfunction " }}}
 " -- Repeat Motion -----------------------
-function! EasyMotion#Repeat(visualmode) " {{{
+function! EasyMotion#Repeat(visualmode,directionoption) " {{{
     " Repeat previous motion with previous targets
     if !has_key(s:previous, 'regexp')
         call s:Message("Previous targets doesn't exist")
@@ -346,6 +346,19 @@ function! EasyMotion#Repeat(visualmode) " {{{
     endif
     let re = s:previous.regexp
     let direction = s:previous.direction
+    if  a:directionoption == 1
+        if s:previous.direction != 1
+            let s:previous.direction = 1
+        elseif s:previous.direction
+            let s:previous.direction = 0
+        endif
+    elseif  a:directionoption == 2
+        if s:previous.direction == 2
+            let s:previous.direction = 0
+        endif
+    else
+        let s:previous.direction = 2
+    endif
     let s:flag.within_line = s:previous.line_flag
     let s:flag.bd_t = s:previous.bd_t_flag
     let s:current.is_operator = mode(1) ==# 'no' ? 1: 0
@@ -354,7 +367,8 @@ function! EasyMotion#Repeat(visualmode) " {{{
     " as a 'normal' motion.
     let is_inclusive = mode(1) ==# 'no' ? 1 : 0
 
-    call s:EasyMotion(re, direction, a:visualmode ? visualmode() : '', is_inclusive)
+    call s:EasyMotion(re, s:previous.direction, a:visualmode ? visualmode() : '', is_inclusive)
+    let s:previous.direction = direction
     return s:EasyMotion_is_cancelled
 endfunction " }}}
 function! EasyMotion#DotRepeat() " {{{
@@ -895,37 +909,77 @@ function! s:GroupingAlgorithmSCTree(targets, keys) "{{{
     return groups
 endfunction "}}}
 " }}}
-" -- Original ---------------------------- {{{
+" Customized function for flashing counts 
 function! s:GroupingAlgorithmOriginal(targets, keys)
-    " Split targets into groups (1 level)
-    let targets_len = len(a:targets)
-    " let keys_len = len(a:keys)
-
-    let groups = {}
-
-    let i = 0
-    let root_group = 0
-    try
-        while root_group < targets_len
-            let groups[a:keys[root_group]] = {}
-
-            for key in a:keys
-                let groups[a:keys[root_group]][key] = a:targets[i]
-
-                let i += 1
-            endfor
-
-            let root_group += 1
-        endwhile
-    catch | endtry
-
-    " Flatten the group array
-    if len(groups) == 1
-        let groups = groups[a:keys[0]]
+    if g:EasyMotion_num > 9
+        let groups = {}
+        let targets1 = a:targets
+        let l:ri1 = 0
+        for target in targets1
+            let l:ri = index(targets1, target) + 1
+            if l:ri < 10
+                let l:ri2 = l:ri
+            else
+                let l:ri1 = l:ri[0]
+                let l:ri2 = l:ri[1]
+            endif
+            try
+                let groups[l:ri1][l:ri2] = target
+            catch
+                let groups[l:ri1] = {}
+                let groups[l:ri1][l:ri2] = target
+            endtry
+        endfor
+    else
+        let groups = {}
+        let targets1 = a:targets
+        for target in targets1
+            let groups[index(targets1, target) + 1] = target
+        endfor
     endif
-
     return groups
 endfunction
+" Customized function for flashing counts (two number don't work)
+" function! s:GroupingAlgorithmOriginal(targets, keys)
+"     let groups = {}
+"     let targets1 = a:targets
+"     for target in targets1
+"         let groups[index(targets1, target) + 1] = target
+"     endfor
+"     return groups
+" endfunction
+" }}}
+" -- Original ---------------------------- {{{
+" function! s:GroupingAlgorithmOriginal(targets, keys)
+"     " Split targets into groups (1 level)
+"     let targets_len = len(a:targets)
+"     " let keys_len = len(a:keys)
+
+"     let groups = {}
+
+"     let i = 0
+"     let root_group = 0
+"     try
+"         while root_group < targets_len
+"             let groups[a:keys[root_group]] = {}
+
+"             for key in a:keys
+"                 let groups[a:keys[root_group]][key] = a:targets[i]
+
+"                 let i += 1
+"             endfor
+
+"             let root_group += 1
+"         endwhile
+"     catch | endtry
+
+"     " Flatten the group array
+"     if len(groups) == 1
+"         let groups = groups[a:keys[0]]
+"     endif
+
+"     return groups
+" endfunction
 " }}}
 
 " -- Coord/key dictionary creation ------- {{{
@@ -1111,6 +1165,10 @@ function! s:PromptUser(groups) "{{{
         " Set lines with markers {{{
         call s:SetLines(lines_items, 'marker')
         redraw "}}}
+
+        " if g:EasyMotion_grouping == 2
+            " sleep 10m
+        " endif
 
         " Get target character {{{
         call s:Prompt('Target key')
@@ -1320,7 +1378,8 @@ function! s:EasyMotion(regexp, direction, visualmode, is_inclusive, ...) " {{{
                     " FIXME: Hmm... I should use filter()
                     " keepjumps call cursor(foldclosed(pos[0]), 0)
                 else
-                    keepjumps call cursor(foldclosedend(pos[0]+1), 0)
+                    "comment the line out: then no hint gabs in folded lines
+                    " keepjumps call cursor(foldclosedend(pos[0]+1), 0)
                 endif
             else
                 call add(targets, pos)
@@ -1399,19 +1458,24 @@ function! s:EasyMotion(regexp, direction, visualmode, is_inclusive, ...) " {{{
 
         " -- Shade inactive source --------------- {{{
         if g:EasyMotion_do_shade && targets_len != 1 && s:flag.dot_repeat != 1
-            if a:direction == 1 " Backward
-                let shade_hl_re = s:flag.within_line
-                                \ ? '^.*\%#'
-                                \ : '\%'. win_first_line .'l\_.*\%#'
-            elseif a:direction == 0 " Forward
-                let shade_hl_re = s:flag.within_line
-                                \ ? '\%#.*$'
-                                \ : '\%#\_.*\%'. win_last_line .'l'
-            else " Both directions
-                let shade_hl_re = s:flag.within_line
-                                \ ? '^.*\%#.*$'
-                                \ : '\_.*'
-            endif
+            " Backward shading doesn't work, if the first line is folded, 
+            " so shade always everything
+            let shade_hl_re = s:flag.within_line
+                            \ ? '^.*\%#.*$'
+                            \ : '\_.*'
+            " if a:direction == 1 " Backward
+            "     let shade_hl_re = s:flag.within_line
+            "                     \ ? '^.*\%#'
+            "                     \ : '\%'. win_first_line .'l\_.*\%#'
+            " elseif a:direction == 0 " Forward
+            "     let shade_hl_re = s:flag.within_line
+            "                     \ ? '\%#.*$'
+            "                     \ : '\%#\_.*\%'. win_last_line .'l'
+            " else " Both directions
+            "     let shade_hl_re = s:flag.within_line
+            "                     \ ? '^.*\%#.*$'
+            "                     \ : '\_.*'
+            " endif
 
             call EasyMotion#highlight#add_highlight(
                 \ shade_hl_re, g:EasyMotion_hl_group_shade)
