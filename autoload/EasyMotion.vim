@@ -1448,6 +1448,8 @@ function! s:EasyMotion(regexp, direction, visualmode, is_inclusive, ...) " {{{
         " Handle no match"{{{
         let targets_len = len(targets)
         if targets_len == 0
+            " indicate to jump to the next occurrence with the default n/N key 
+            let g:EasyMotion_grouping = 1
             call s:Throw('No matches')
         endif
         "}}}
