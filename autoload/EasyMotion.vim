@@ -1029,8 +1029,9 @@ function! s:PromptUser(groups) "{{{
     " Recursive
     let group_values = values(a:groups)
 
-    " -- If only one possible match, jump directly to it {{{
-    if len(group_values) == 1
+    " disable direct jump to match, if you use group algorithm type 2
+    if len(group_values) == 1 && g:EasyMotion_grouping != 2
+        " -- If only one possible match, jump directly to it {{{
         if mode(1) ==# 'no'
             " Consider jump to first match
             " NOTE: matchstr() handles multibyte characters.
