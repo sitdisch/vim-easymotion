@@ -222,17 +222,17 @@ xnoremap <silent><Plug>(easymotion-prev)
 
 " -- Repeat Motion {{{
 noremap  <silent><Plug>(easymotion-repeat)
-    \      :<C-u>call EasyMotion#Repeat(0,0)<CR>
+    \      :<C-u>call EasyMotion#Repeat(0,2)<CR>
 xnoremap <silent><Plug>(easymotion-repeat)
-   \ <Esc>:<C-u>call EasyMotion#Repeat(1,0)<CR>
+   \ <Esc>:<C-u>call EasyMotion#Repeat(1,2)<CR>
 noremap  <silent><Plug>(easymotion-repeat-change-direction)
     \      :<C-u>call EasyMotion#Repeat(0,1)<CR>
 xnoremap <silent><Plug>(easymotion-repeat-change-direction)
     \ <Esc>:<C-u>call EasyMotion#Repeat(1,1)<CR>
 noremap  <silent><Plug>(easymotion-repeat-hold-direction)
-    \      :<C-u>call EasyMotion#Repeat(0,2)<CR>
+    \      :<C-u>call EasyMotion#Repeat(0,0)<CR>
 xnoremap <silent><Plug>(easymotion-repeat-hold-direction)
-    \ <Esc>:<C-u>call EasyMotion#Repeat(1,2)<CR>
+    \ <Esc>:<C-u>call EasyMotion#Repeat(1,0)<CR>
 
 noremap  <silent><Plug>(easymotion-dotrepeat)
     \      :<C-u>call EasyMotion#DotRepeat()<CR>

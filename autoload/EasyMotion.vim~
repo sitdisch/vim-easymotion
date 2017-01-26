@@ -337,7 +337,7 @@ function! EasyMotion#User(pattern, visualmode, direction, inclusive, ...) " {{{
     return s:EasyMotion_is_cancelled
 endfunction " }}}
 " -- Repeat Motion -----------------------
-function! EasyMotion#Repeat(visualmode,directionoption) " {{{
+function! EasyMotion#Repeat(visualmode,direction) " {{{
     " Repeat previous motion with previous targets
     if !has_key(s:previous, 'regexp')
         call s:Message("Previous targets doesn't exist")
@@ -345,17 +345,12 @@ function! EasyMotion#Repeat(visualmode,directionoption) " {{{
         return s:EasyMotion_is_cancelled
     endif
     let re = s:previous.regexp
+    " enable default behavior of changing directions with ; and ,
     let direction = s:previous.direction
-    if  a:directionoption == 1
-        if s:previous.direction != 1
-            let s:previous.direction = 1
-        elseif s:previous.direction
-            let s:previous.direction = 0
-        endif
-    elseif  a:directionoption == 2
-        if s:previous.direction == 2
-            let s:previous.direction = 0
-        endif
+    if  a:direction == 1
+        let s:previous.direction =  (s:previous.direction != 1 ? 1 : 0)
+    elseif  a:direction == 0
+        let s:previous.direction =  (s:previous.direction == 2 ? 0 : s:previous.direction)
     else
         let s:previous.direction = 2
     endif
@@ -406,7 +401,15 @@ function! EasyMotion#NextPrevious(visualmode, direction) " {{{
         return s:EasyMotion_is_cancelled
     endif
     let re = s:previous.regexp
-    let search_direction = (a:direction == 1 ? 'b' : '')
+    
+    " enable default behavior of changing directions with ; and ,
+    if  a:direction == 1
+        let l:direction =  (s:previous.direction != 1 ? 1 : 0)
+    elseif  a:direction == 0
+        let l:direction =  (s:previous.direction == 2 ? 0 : s:previous.direction)
+    endif
+    
+    let search_direction = (l:direction == 1 ? 'b' : '')
 
     if g:EasyMotion_move_highlight
         call EasyMotion#highlight#attach_autocmd()
