@@ -262,10 +262,23 @@ endfunction " }}}
 " -- Search Motion -----------------------
 function! EasyMotion#Search(visualmode, direction, respect_direction) " {{{
     let s:current.is_operator = mode(1) ==# 'no' ? 1: 0
+    " save previous non_search direction and regexp
+    if !has_key(s:previous,'regexp')
+        let s:previous['regexp'] = '.'
+        let s:previous['direction'] = a:direction
+        let s:previous['regexp_without_search_fFtT'] = '.'
+    endif
+    let l:direction = s:previous.direction
+    let l:regexp = s:previous.regexp
+    let l:regexp_without_search_fFtT = s:previous.regexp_without_search_fFtT
     let search_direction = a:respect_direction ?
     \   (a:direction == 1 ? v:searchforward : 1-v:searchforward) :
     \   (a:direction)
     call s:EasyMotion(@/, search_direction, a:visualmode ? visualmode() : '', 0)
+    " restore previous easymotion direction and regexp
+    let s:previous.direction = l:direction
+    let s:previous.regexp = l:regexp
+    let s:previous['regexp_without_search_fFtT'] = l:regexp_without_search_fFtT
     return s:EasyMotion_is_cancelled
 endfunction " }}}
 " -- JumpToAnywhere Motion ---------------
@@ -345,14 +358,22 @@ function! EasyMotion#Repeat(visualmode,direction) " {{{
         return s:EasyMotion_is_cancelled
     endif
     let re = s:previous.regexp
+    " save previous variables
+    let l:regexp = s:previous.regexp
+    let l:direction = s:previous.direction
+    let l:regexp_without_search_fFtT = s:previous.regexp_without_search_fFtT
     " enable default behavior of changing directions with ; and ,
-    let direction = s:previous.direction
-    if  a:direction == 1
-        let s:previous.direction =  (s:previous.direction != 1 ? 1 : 0)
-    elseif  a:direction == 0
-        let s:previous.direction =  (s:previous.direction == 2 ? 0 : s:previous.direction)
-    else
+    if  a:direction > 1
         let s:previous.direction = 2
+        if a:direction == 3
+            let re = s:previous.regexp_without_search_fFtT
+        endif
+    else
+        if  a:direction == 1
+            let s:previous.direction =  (s:previous.direction != 1 ? 1 : 0)
+        else
+            let s:previous.direction =  (s:previous.direction == 2 ? 0 : s:previous.direction)
+        endif
     endif
     let s:flag.within_line = s:previous.line_flag
     let s:flag.bd_t = s:previous.bd_t_flag
@@ -363,7 +384,9 @@ function! EasyMotion#Repeat(visualmode,direction) " {{{
     let is_inclusive = mode(1) ==# 'no' ? 1 : 0
 
     call s:EasyMotion(re, s:previous.direction, a:visualmode ? visualmode() : '', is_inclusive)
-    let s:previous.direction = direction
+    let s:previous.regexp = l:regexp
+    let s:previous.direction = l:direction
+    let s:previous['regexp_without_search_fFtT'] = l:regexp_without_search_fFtT
     return s:EasyMotion_is_cancelled
 endfunction " }}}
 function! EasyMotion#DotRepeat() " {{{
@@ -554,8 +577,10 @@ function! s:findMotion(num_strokes, direction) "{{{
     else
         let s:previous['input'] = get(s:previous, 'input', '')
     endif
+    
     let input = EasyMotion#command_line#GetInput(
                     \ a:num_strokes, s:previous.input, a:direction)
+    
     let s:previous['input'] = input
 
     " Check that we have an input char
@@ -937,20 +962,11 @@ function! s:GroupingAlgorithmOriginal(targets, keys)
         let groups = {}
         let targets1 = a:targets
         for target in targets1
-            let groups[index(targets1, target) + 1] = target
+            let groups[index(targets1, target) + g:EasyMotion_flash_start_num] = target
         endfor
     endif
     return groups
 endfunction
-" Customized function for flashing counts (two number don't work)
-" function! s:GroupingAlgorithmOriginal(targets, keys)
-"     let groups = {}
-"     let targets1 = a:targets
-"     for target in targets1
-"         let groups[index(targets1, target) + 1] = target
-"     endfor
-"     return groups
-" endfunction
 " }}}
 " -- Original ---------------------------- {{{
 " function! s:GroupingAlgorithmOriginal(targets, keys)
@@ -1294,6 +1310,13 @@ function! s:EasyMotion(regexp, direction, visualmode, is_inclusive, ...) " {{{
     " Store info for Repeat motion {{{
     if s:flag.dot_repeat != 1
         " Store Regular Expression
+        if g:EasyMotion_fFtT == 1
+            if !has_key(s:previous,'regexp')
+                let s:previous['regexp_without_search_fFtT'] = '.'
+            endif
+        else
+            let s:previous['regexp_without_search_fFtT'] = a:regexp
+        endif
         let s:previous['regexp'] = a:regexp
         let s:previous['direction'] = a:direction
         let s:previous['operator'] = v:operator
@@ -1657,6 +1680,12 @@ function! s:EasyMotion(regexp, direction, visualmode, is_inclusive, ...) " {{{
         call EasyMotion#attach_active_autocmd() "}}}
 
         call s:restore_cursor_state(a:visualmode)
+        " this is necessary to still enable the old dot cmd after this
+        if exists('g:repeat_tick')
+            if g:repeat_tick == s:current.changedtick
+                let g:repeat_tick = b:changedtick
+            endif
+        endif "}}}
         let s:EasyMotion_is_cancelled = 1 " Cancel
     catch
         call s:Message(v:exception . ' : ' . v:throwpoint)
