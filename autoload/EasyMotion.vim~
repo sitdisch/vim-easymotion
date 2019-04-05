@@ -384,6 +384,7 @@ function! EasyMotion#Repeat(visualmode,direction) " {{{
     let is_inclusive = mode(1) ==# 'no' ? 1 : 0
 
     call s:EasyMotion(re, s:previous.direction, a:visualmode ? visualmode() : '', is_inclusive)
+    let g:EasyMotion_repeat_direction = s:previous.direction
     let s:previous.regexp = l:regexp
     let s:previous.direction = l:direction
     let s:previous['regexp_without_search_fFtT'] = l:regexp_without_search_fFtT
@@ -431,6 +432,7 @@ function! EasyMotion#NextPrevious(visualmode, direction) " {{{
     elseif  a:direction == 0
         let l:direction =  (s:previous.direction == 2 ? 0 : s:previous.direction)
     endif
+    let g:EasyMotion_repeat_direction = l:direction
     
     let search_direction = (l:direction == 1 ? 'b' : '')
 
@@ -541,26 +543,50 @@ endfunction " }}}
 
 " -- Get characters from user input ------
 function! s:GetChar(...) abort "{{{
-    let mode = get(a:, 1, 0)
-    while 1
-        " Workaround for https://github.com/osyo-manga/vital-over/issues/53
-        try
-            let char = call('getchar', a:000)
-        catch /^Vim:Interrupt$/
-            let char = 3 " <C-c>
-        endtry
-        if char == 27 || char == 3
-            " Escape or <C-c> key pressed
-            redraw
-            call s:Message('Cancelled')
-            return ''
-        endif
-        " Workaround for the <expr> mappings
-        if string(char) !=# "\x80\xfd`"
-            return mode == 1 ? !!char
-            \    : type(char) == type(0) ? nr2char(char) : char
-        endif
-    endwhile
+    if g:EasyMotion_showdelay > 0
+      if exists("g:CustomMacroRun")
+          let g:sleep_interruption_key = ''
+          sleep 100m
+          return g:EasyMotion_target
+      elseif g:EasyMotion_showdelay == 2
+          if exists("g:last_operator") && g:last_operator =~# '[yd]' || g:repeat_mode == 1
+              let g:sleep_interruption_key = ''
+              sleep 150m
+          else
+              let g:sleep_interruption_key = GetKeyWithTimeout(150)
+          endif
+          return ''
+      else
+          if exists("g:last_operator") && g:last_operator =~# '[yd]' || g:repeat_mode == 1
+              let g:sleep_interruption_key = ''
+              sleep 100m
+          else
+              let g:sleep_interruption_key = GetKeyWithTimeout(100)
+          endif
+          return g:EasyMotion_target
+      endif
+    else
+      let mode = get(a:, 1, 0)
+      while 1
+          " Workaround for https://github.com/osyo-manga/vital-over/issues/53
+          try
+              let char = call('getchar', a:000)
+          catch /^Vim:Interrupt$/
+              let char = 3 " <C-c>
+          endtry
+          if char == 27 || char == 3
+              " Escape or <C-c> key pressed
+              redraw
+              call s:Message('Cancelled')
+              return ''
+          endif
+          " Workaround for the <expr> mappings
+          if string(char) !=# "\x80\xfd`"
+              return mode == 1 ? !!char
+              \    : type(char) == type(0) ? nr2char(char) : char
+          endif
+      endwhile
+    endif
 endfunction "}}}
 
 " -- Find Motion Helper ------------------
@@ -578,8 +604,12 @@ function! s:findMotion(num_strokes, direction) "{{{
         let s:previous['input'] = get(s:previous, 'input', '')
     endif
     
-    let input = EasyMotion#command_line#GetInput(
-                    \ a:num_strokes, s:previous.input, a:direction)
+    if g:EasyMotion_showdelay > 0
+        let input = g:fFtT_target
+    else
+        let input = EasyMotion#command_line#GetInput(
+                        \ a:num_strokes, s:previous.input, a:direction)
+    endif
     
     let s:previous['input'] = input
 
@@ -603,19 +633,25 @@ function! s:convertRegep(input) "{{{
     " 2. migemo
     " 3. smartsign
     " 4. smartcase
-    let re = s:should_use_regexp() ? a:input : s:escape_regexp_char(a:input)
+    let use_migemo = s:should_use_migemo(a:input)
+    let re = use_migemo || s:should_use_regexp() ? a:input : s:escape_regexp_char(a:input)
 
     " Convert space to match only start of spaces
     if re ==# ' '
         let re = '\s\+'
     endif
 
-    if s:should_use_migemo(a:input)
+    if use_migemo
         let re = s:convertMigemo(re)
     endif
 
     if s:should_use_smartsign(a:input)
-        let re = s:convertSmartsign(a:input)
+        let r = s:convertSmartsign(a:input)
+        if use_migemo
+            let re = re . '\m\|' . r
+        else
+            let re = r
+        endif
     endif
 
     let case_flag = EasyMotion#helper#should_case_sensitive(
@@ -635,10 +671,7 @@ function! s:convertMigemo(re) "{{{
     if ! has_key(s:migemo_dicts, &l:encoding)
         let s:migemo_dicts[&l:encoding] = EasyMotion#helper#load_migemo_dict()
     endif
-    if re =~# '^\a$'
-        let re = get(s:migemo_dicts[&l:encoding], re, a:re)
-    endif
-    return re
+    return get(s:migemo_dicts[&l:encoding], re, a:re)
 endfunction "}}}
 function! s:convertSmartsign(chars) "{{{
     " Convert given chars to smartsign string
@@ -683,7 +716,7 @@ function! s:should_use_regexp() "{{{
     return g:EasyMotion_use_regexp == 1 && s:flag.regexp == 1
 endfunction "}}}
 function! s:should_use_migemo(char) "{{{
-    if ! g:EasyMotion_use_migemo || match(a:char, '\A') != -1
+    if ! g:EasyMotion_use_migemo || match(a:char, '[^!-~]') != -1
         return 0
     endif
 
@@ -939,32 +972,11 @@ endfunction "}}}
 " }}}
 " Customized function for flashing counts 
 function! s:GroupingAlgorithmOriginal(targets, keys)
-    if g:EasyMotion_num > 9
-        let groups = {}
-        let targets1 = a:targets
-        let l:ri1 = 0
-        for target in targets1
-            let l:ri = index(targets1, target) + 1
-            if l:ri < 10
-                let l:ri2 = l:ri
-            else
-                let l:ri1 = l:ri[0]
-                let l:ri2 = l:ri[1]
-            endif
-            try
-                let groups[l:ri1][l:ri2] = target
-            catch
-                let groups[l:ri1] = {}
-                let groups[l:ri1][l:ri2] = target
-            endtry
-        endfor
-    else
-        let groups = {}
-        let targets1 = a:targets
-        for target in targets1
-            let groups[index(targets1, target) + g:EasyMotion_flash_start_num] = target
-        endfor
-    endif
+    let groups = {}
+    let targets1 = a:targets
+    for target in targets1
+        let groups[index(targets1, target) + g:EasyMotion_flash_start_num] = target
+    endfor
     return groups
 endfunction
 " }}}
@@ -1186,10 +1198,6 @@ function! s:PromptUser(groups) "{{{
         call s:SetLines(lines_items, 'marker')
         redraw "}}}
 
-        " if g:EasyMotion_grouping == 2
-            " sleep 10m
-        " endif
-
         " Get target character {{{
         call s:Prompt('Target key')
         let char = s:GetChar()
@@ -1257,6 +1265,7 @@ function! s:PromptUser(groups) "{{{
     " }}}
     " -- Check if the input char is valid ---- {{{
     if ! has_key(a:groups, char)
+        let g:EasyMotion_grouping = 1
         call s:Throw('Invalid target')
     endif
     " }}}
@@ -1393,27 +1402,38 @@ function! s:EasyMotion(regexp, direction, visualmode, is_inclusive, ...) " {{{
         "       but in this case, it's better to allows jump side effect
         "       to gathering matched targets coordinates.
         let pos = searchpos(regexp, search_direction . (config.accept_cursor_pos ? 'c' : ''), search_stopline)
-        while 1
-            " Reached end of search range
-            if pos == [0, 0]
-                break
-            endif
-
-            " Skip folded lines {{{
-            if EasyMotion#helper#is_folded(pos[0])
-                if search_direction ==# 'b'
-                    " FIXME: Hmm... I should use filter()
-                    " keepjumps call cursor(foldclosed(pos[0]), 0)
-                else
-                    "comment the line out: then no hint gabs in folded lines
-                    " keepjumps call cursor(foldclosedend(pos[0]+1), 0)
+        if g:EasyMotion_searchfoldedlines == 1
+            let l:ri1 =  0
+            while 1
+                " Reached end of search range
+                if (pos == [0, 0])
+                    let g:EasyMotion_flash_adapt_num = l:ri1
+                    break
+                elseif (l:ri1 > 99)
+                    break
                 endif
-            else
+
                 call add(targets, pos)
-            endif
-            "}}}
-            let pos = searchpos(regexp, search_direction, search_stopline)
-        endwhile
+                "}}}
+                let pos = searchpos(regexp, search_direction, search_stopline)
+                let l:ri1 +=  1
+            endwhile
+            unlet l:ri1
+        else
+            while 1
+                " Reached end of search range
+                if pos == [0, 0]
+                    break
+                endif
+
+                " Skip folded lines {{{
+                if !(EasyMotion#helper#is_folded(pos[0]))
+                    call add(targets, pos)
+                endif
+                "}}}
+                let pos = searchpos(regexp, search_direction, search_stopline)
+            endwhile
+        endif
         "}}}
 
         " Handle bidirection "{{{
